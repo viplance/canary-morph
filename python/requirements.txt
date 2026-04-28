@@ -1,0 +1,26 @@
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.2.2
+torchaudio==2.2.2
+numpy==1.26.4
+scipy==1.11.4
+librosa==0.10.2
+soundfile==0.12.1
+numba==0.59.1
+faiss-cpu==1.8.0
+praat-parselmouth==0.4.3
+pyworld==0.3.4
+torchcrepe==0.0.23
+fairseq==0.12.2
+einops==0.8.0
+local-attention==1.9.14
+tqdm==4.66.4
+ffmpeg-python==0.2.0
+av==12.1.0
+ffmpy==0.3.1
+tensorboard
+tensorboardX
+Cython
+pydub
+resampy
+gradio==3.34.0
+setuptools

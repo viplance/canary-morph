@@ -1,0 +1,11 @@
+node_modules/
+models/pretrained/
+models/dataset/
+models/trained/
+tmp/
+python/.venv/
+*.log
+dist/
+source/*
+!source/.gitkeep
+**/*.wav
