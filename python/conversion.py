@@ -72,10 +72,15 @@ def infer(input_path: Path, output_path: Path, model_pth: Path, index_path: Path
         if result[0] is None:
             print(f"Conversion failed: {info}")
             sys.exit(1)
-            
+
         tgt_sr, audio_data = result
+        # RVC's pipeline returns int16; convert back to float32 in [-1, 1]
+        # so the downstream ffmpeg 24-bit encode receives correctly-scaled samples.
+        if np.issubdtype(audio_data.dtype, np.integer):
+            max_val = float(np.iinfo(audio_data.dtype).max)
+            audio_data = audio_data.astype(np.float32) / max_val
         sf.write(str(output_path), audio_data, tgt_sr, subtype='FLOAT')
-        print(f"Inference complete. Saved to {output_path}")
+        print(f"Inference complete. Saved to {output_path} ({tgt_sr} Hz)")
 
     finally:
         # Restore argv just in case

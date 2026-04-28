@@ -19,6 +19,9 @@ export async function decodeForRVC(inputPath: string, outWavPath: string): Promi
 }
 
 export async function encodeFinal(inputPath: string, outputPath: string): Promise<void> {
+  // ffmpeg-static is built without libsoxr, so the soxr resampler option from the
+  // spec is unavailable. The input is already 48k mono float; the only work here
+  // is bit-depth conversion (float32 -> 24-bit PCM), no resampling required.
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
       .audioChannels(1)
