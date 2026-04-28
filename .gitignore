@@ -1,7 +1,5 @@
 node_modules/
-models/pretrained/
-models/dataset/
-models/trained/
+models/
 tmp/
 python/.venv/
 *.log
