@@ -6,7 +6,19 @@ import soundfile as sf
 import torch
 import numpy as np
 
-def infer(input_path: Path, output_path: Path, model_pth: Path, index_path: Path, pitch: int, method: str):
+def infer(
+    input_path: Path,
+    output_path: Path,
+    model_pth: Path,
+    index_path: Path,
+    pitch: int,
+    method: str,
+    index_rate: float = 0.75,
+    filter_radius: int = 3,
+    rms_mix_rate: float = 0.25,
+    protect: float = 0.33,
+    device_pref: str = "auto",
+):
     # Resolve absolute paths before changing directory
     input_path = input_path.resolve()
     output_path = output_path.resolve()
@@ -42,18 +54,30 @@ def infer(input_path: Path, output_path: Path, model_pth: Path, index_path: Path
         from configs.config import Config
         
         config = Config()
-        config.device = "cpu"
-        if torch.backends.mps.is_available():
-            config.device = "mps"
-        if torch.cuda.is_available():
-            config.device = "cuda:0"
-        
+        if device_pref == "cpu":
+            config.device = "cpu"
+        elif device_pref == "mps":
+            config.device = "mps" if torch.backends.mps.is_available() else "cpu"
+        elif device_pref == "cuda":
+            config.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        else:  # auto
+            config.device = "cpu"
+            if torch.backends.mps.is_available():
+                config.device = "mps"
+            if torch.cuda.is_available():
+                config.device = "cuda:0"
+
         config.is_half = True if "cuda" in config.device else False
+        print(f"Inference device: {config.device} (half={config.is_half})")
         
         vc = VC(config)
         vc.get_vc(str(model_pth))
         
         # opt_vocal is a tuple (info, (tgt_sr, audio_data))
+        print(
+            f"Conversion params: method={method} pitch={pitch} index_rate={index_rate} "
+            f"filter_radius={filter_radius} rms_mix_rate={rms_mix_rate} protect={protect}"
+        )
         info, result = vc.vc_single(
             sid=0,
             input_audio_path=str(input_path),
@@ -61,12 +85,12 @@ def infer(input_path: Path, output_path: Path, model_pth: Path, index_path: Path
             f0_file=None,
             f0_method=method,
             file_index=str(index_path),
-            file_index2="", 
-            index_rate=0.75,
-            filter_radius=3,
+            file_index2="",
+            index_rate=index_rate,
+            filter_radius=filter_radius,
             resample_sr=0,
-            rms_mix_rate=0.25,
-            protect=0.33
+            rms_mix_rate=rms_mix_rate,
+            protect=protect,
         )
         
         if result[0] is None:
@@ -93,7 +117,26 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--index", type=str, required=True)
     parser.add_argument("--pitch", type=int, default=0)
-    parser.add_argument("--method", type=str, default="rmvpe")
+    parser.add_argument("--method", type=str, default="rmvpe",
+                        choices=["rmvpe", "pm", "harvest", "crepe"])
+    parser.add_argument("--index-rate", type=float, default=0.75, dest="index_rate")
+    parser.add_argument("--filter-radius", type=int, default=3, dest="filter_radius")
+    parser.add_argument("--rms-mix-rate", type=float, default=0.25, dest="rms_mix_rate")
+    parser.add_argument("--protect", type=float, default=0.33)
+    parser.add_argument("--device", type=str, default="auto",
+                        choices=["auto", "cpu", "mps", "cuda"])
     args = parser.parse_args()
-    
-    infer(Path(args.input), Path(args.output), Path(args.model), Path(args.index), args.pitch, args.method)
+
+    infer(
+        Path(args.input),
+        Path(args.output),
+        Path(args.model),
+        Path(args.index),
+        args.pitch,
+        args.method,
+        index_rate=args.index_rate,
+        filter_radius=args.filter_radius,
+        rms_mix_rate=args.rms_mix_rate,
+        protect=args.protect,
+        device_pref=args.device,
+    )

@@ -10,7 +10,17 @@ import {
   TMP_DIR,
 } from '../lib/paths.js';
 
-export async function runTransform(input: string, output: string, opts: { pitch?: number }) {
+export interface TransformOptions {
+  pitch?: number;
+  method?: 'rmvpe' | 'pm' | 'harvest' | 'crepe';
+  indexRate?: number;
+  protect?: number;
+  rmsMixRate?: number;
+  filterRadius?: number;
+  device?: 'auto' | 'cpu' | 'mps' | 'cuda';
+}
+
+export async function runTransform(input: string, output: string, opts: TransformOptions) {
   // 1. Validate input
   if (!existsSync(input)) {
     throw new Error(`Input file not found: ${input}`);
@@ -29,11 +39,9 @@ export async function runTransform(input: string, output: string, opts: { pitch?
   const out48kFloat = join(TMP_DIR, `${id}.out48k.wav`);
 
   try {
-    // 5. Decode for RVC
     log.info('Decoding input audio...');
     await decodeForRVC(input, in16k);
 
-    // 6. Run Python inference
     log.info('Running voice conversion...');
     await runPython('conversion.py', [
       '--input', in16k,
@@ -41,16 +49,19 @@ export async function runTransform(input: string, output: string, opts: { pitch?
       '--model', MODEL_PTH,
       '--index', MODEL_INDEX,
       '--pitch', String(opts.pitch ?? 0),
-      '--method', 'rmvpe',
+      '--method', opts.method ?? 'rmvpe',
+      '--index-rate', String(opts.indexRate ?? 0.75),
+      '--protect', String(opts.protect ?? 0.33),
+      '--rms-mix-rate', String(opts.rmsMixRate ?? 0.25),
+      '--filter-radius', String(opts.filterRadius ?? 3),
+      '--device', opts.device ?? 'auto',
     ]);
 
-    // 7. Encode final
     log.info('Encoding final output (48kHz, 24-bit, mono)...');
     await encodeFinal(out48kFloat, output);
 
     log.success(`Transformation complete: ${output}`);
   } finally {
-    // 8. Cleanup
     if (existsSync(in16k)) await rm(in16k);
     if (existsSync(out48kFloat)) await rm(out48kFloat);
   }

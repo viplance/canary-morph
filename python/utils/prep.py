@@ -5,7 +5,7 @@ import librosa
 import soundfile as sf
 import numpy as np
 
-def prepare_dataset(source_dir: Path, dataset_dir: Path, target_sr: int = 48000) -> int:
+def prepare_dataset(source_dir: Path, dataset_dir: Path, target_sr: int = 48000, top_db: int = 30) -> int:
     source_dir = Path(source_dir)
     dataset_dir = Path(dataset_dir)
     dataset_dir.mkdir(parents=True, exist_ok=True)
@@ -22,54 +22,63 @@ def prepare_dataset(source_dir: Path, dataset_dir: Path, target_sr: int = 48000)
 
     print(f"Found {len(files)} files. Processing...")
 
-    # 2. Load and concatenate
-    all_audio = []
+    slice_count = 0
+    total_duration = 0
+    rejected_short = 0
+    rejected_quiet = 0
+
+    # RVC's training script crops segments of `segment_size` samples from each slice
+    # (typically 17280 @ 48k = 0.36 s) and then re-slices internally. Slices below
+    # ~2 s sometimes end up empty after RVC's own preprocessing, which crashes
+    # train.py with "tensor size 0". Min 2.0 s gives RVC headroom.
+    MIN_DUR_S = 2.0
+    # Reject near-silent slices that pass the silence-split threshold but contain
+    # only breath/room noise. -40 dBFS RMS is the floor for usable speech.
+    MIN_RMS_DBFS = -40.0
+    min_rms_linear = 10 ** (MIN_RMS_DBFS / 20)
+
+    # Stream files one at a time instead of concatenating the whole corpus into
+    # one numpy array (which doubles peak RAM during np.concatenate and pins the
+    # decoded audio for the lifetime of the loop).
     for f in files:
         try:
             y, _ = librosa.load(f, sr=target_sr, mono=True)
-            all_audio.append(y)
         except Exception as e:
             print(f"Warning: Failed to load {f}: {e}")
-
-    if not all_audio:
-        return 0
-
-    y = np.concatenate(all_audio)
-
-    # 4. Trim silence
-    y, _ = librosa.effects.trim(y, top_db=30)
-
-    # 5. Slice on silence
-    # We use librosa.effects.split
-    # RVC likes 3-10s slices.
-    intervals = librosa.effects.split(y, top_db=30, frame_length=2048, hop_length=512)
-    
-    slice_count = 0
-    total_duration = 0
-    
-    for start, end in intervals:
-        dur = (end - start) / target_sr
-        if dur < 1.0:
             continue
-        
-        # If longer than 15s, we should ideally split further, but for now we take it
-        # as RVC's training script might handle it or we can sub-slice.
-        # Minimal implementation as per plan:
-        chunk = y[start:end]
-        
-        # 6. Peak normalize to -1 dBFS
-        peak = np.max(np.abs(chunk))
-        if peak > 0:
-            chunk = chunk * (10**(-1/20)) / peak
 
-        # 7. Save slice
-        out_path = dataset_dir / f"{slice_count:05d}.wav"
-        sf.write(out_path, chunk, target_sr, subtype='FLOAT')
-        
-        slice_count += 1
-        total_duration += dur
+        y, _ = librosa.effects.trim(y, top_db=top_db)
+        intervals = librosa.effects.split(y, top_db=top_db, frame_length=2048, hop_length=512)
 
-    print(f"Finished. Created {slice_count} slices. Total duration: {total_duration:.2f}s")
+        for start, end in intervals:
+            dur = (end - start) / target_sr
+            if dur < MIN_DUR_S:
+                rejected_short += 1
+                continue
+
+            chunk = y[start:end]
+
+            rms = float(np.sqrt(np.mean(chunk ** 2)))
+            if rms < min_rms_linear:
+                rejected_quiet += 1
+                continue
+
+            peak = float(np.max(np.abs(chunk)))
+            if peak > 0:
+                chunk = chunk * (10 ** (-1 / 20)) / peak
+
+            out_path = dataset_dir / f"{slice_count:05d}.wav"
+            sf.write(out_path, chunk, target_sr, subtype='FLOAT')
+
+            slice_count += 1
+            total_duration += dur
+
+        del y
+
+    print(
+        f"Finished. Created {slice_count} slices. Total duration: {total_duration:.2f}s. "
+        f"Rejected: {rejected_short} too-short (<{MIN_DUR_S}s), {rejected_quiet} too-quiet (<{MIN_RMS_DBFS} dBFS RMS)."
+    )
     
     if total_duration < 10:
         print("Error: Not enough data (less than 10s).")
@@ -85,6 +94,7 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=str, required=True)
     parser.add_argument("--dataset", type=str, required=True)
     parser.add_argument("--sr", type=int, default=48000)
+    parser.add_argument("--top-db", type=int, default=30, dest="top_db")
     args = parser.parse_args()
-    
-    prepare_dataset(Path(args.source), Path(args.dataset), args.sr)
+
+    prepare_dataset(Path(args.source), Path(args.dataset), args.sr, args.top_db)

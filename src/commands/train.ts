@@ -17,7 +17,17 @@ import {
   VENV_PYTHON,
 } from '../lib/paths.js';
 
-export async function runTrain(opts: { epochs?: number; batchSize?: number; reprep?: boolean }) {
+export interface TrainOptions {
+  epochs?: number;
+  batchSize?: number;
+  saveEvery?: number;
+  topDb?: number;
+  device?: 'auto' | 'cpu' | 'mps' | 'cuda';
+  cacheInGpu?: boolean;
+  reprep?: boolean;
+}
+
+export async function runTrain(opts: TrainOptions) {
   if (!existsSync(VENV_PYTHON)) {
     log.info('Python environment not found. Running setup...');
     await runSetup();
@@ -97,9 +107,13 @@ export async function runTrain(opts: { epochs?: number; batchSize?: number; repr
       '--epochs', String(opts.epochs ?? 200),
       '--batch-size', String(opts.batchSize ?? 4),
       '--sample-rate', '48000',
+      '--save-every', String(opts.saveEvery ?? 50),
+      '--top-db', String(opts.topDb ?? 30),
+      '--device', opts.device ?? 'auto',
+      ...(opts.cacheInGpu ? ['--cache-in-gpu'] : []),
       ...(opts.reprep ? ['--reprep'] : []),
-    ], { 
-      onProgress
+    ], {
+      onProgress,
     });
 
     multibar.stop();
