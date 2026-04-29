@@ -18,6 +18,7 @@ export interface TransformOptions {
   rmsMixRate?: number;
   filterRadius?: number;
   device?: 'auto' | 'cpu' | 'mps' | 'cuda';
+  bitrate?: number;
 }
 
 export async function runTransform(input: string, output: string, opts: TransformOptions) {
@@ -25,8 +26,8 @@ export async function runTransform(input: string, output: string, opts: Transfor
   if (!existsSync(input)) {
     throw new Error(`Input file not found: ${input}`);
   }
-  if (!output.endsWith('.wav')) {
-    throw new Error('Output file must end with .wav');
+  if (!output.endsWith('.wav') && !output.endsWith('.mp3')) {
+    throw new Error('Output file must end with .wav or .mp3');
   }
 
   // 2. Validate model
@@ -57,8 +58,9 @@ export async function runTransform(input: string, output: string, opts: Transfor
       '--device', opts.device ?? 'auto',
     ]);
 
-    log.info('Encoding final output (48kHz, 24-bit, mono)...');
-    await encodeFinal(out48kFloat, output);
+    const fmt = output.endsWith('.mp3') ? `MP3 ${opts.bitrate ?? 192}kbps` : '48kHz 24-bit WAV';
+    log.info(`Encoding final output (${fmt})...`);
+    await encodeFinal(out48kFloat, output, opts.bitrate);
 
     log.success(`Transformation complete: ${output}`);
   } finally {

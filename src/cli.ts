@@ -44,7 +44,7 @@ program
 
 program
   .command('transform <input> <output>')
-  .description('Convert <input> audio file to the trained timbre, write to <output>.wav')
+  .description('Convert <input> audio file to the trained timbre, write to <output>.wav or <output>.mp3')
   .option('-p, --pitch <semitones>', 'pitch shift in semitones (e.g. 12 male->female, -12 female->male)', parseInt10, 0)
   .option('--method <name>', 'pitch extractor: rmvpe | pm | harvest | crepe', 'rmvpe')
   .option('--index-rate <0-1>', 'how strongly to retrieve reference timbre (0=off, 1=max)', parseFloatBounded(0, 1), 0.75)
@@ -52,6 +52,7 @@ program
   .option('--rms-mix-rate <0-1>', 'blend reference loudness envelope (0=keep source dynamics, 1=match reference)', parseFloatBounded(0, 1), 0.25)
   .option('--filter-radius <n>', 'pitch median-filter radius (odd 0-7; smooths f0 jitter)', parseInt10, 3)
   .option('--device <name>', 'auto | cpu | mps | cuda', 'auto')
+  .option('--bitrate <kbps>', 'MP3 bitrate in kbps (only used when output is .mp3)', parseInt10, 192)
   .action((input, output, opts) => runTransform(input, output, opts));
 
 program.parseAsync(process.argv).catch((err) => {

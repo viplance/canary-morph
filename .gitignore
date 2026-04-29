@@ -7,3 +7,10 @@ dist/
 source/*
 !source/.gitkeep
 **/*.wav
+**/*.mp3
+**/*.ogg
+**/*.flac
+**/*.m4a
+**/*.aac
+scheduled_tasks.lock
+.DS_Store
